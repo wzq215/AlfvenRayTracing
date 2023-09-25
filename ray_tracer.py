@@ -172,18 +172,41 @@ def step_on(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
         return None
     return pos_new, k_new, omega
 
+def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
+    if direction == 'Backward':
+        dt = -dt
+
+    dwdx_1, dwdk_1, omega_0 = get_derivative(pos_tmp, k_tmp, xh, kh, mode=mode)
+    dwdx_2, dwdk_2, _ = get_derivative(pos_tmp + np.array(dwdk_1) * dt/(Rs_km*1e3)/2,
+                                       k_tmp - np.array(dwdx_1) * dt/2,
+                                       xh, kh, mode=mode)
+    dwdx_3, dwdk_3, _ = get_derivative(pos_tmp + np.array(dwdk_2) * dt/(Rs_km*1e3)/2,
+                                       k_tmp - np.array(dwdx_2) * dt/2,
+                                       xh, kh, mode=mode)
+    dwdx_4, dwdk_4, _ = get_derivative(pos_tmp + np.array(dwdk_3) * dt/(Rs_km*1e3),
+                                       k_tmp - np.array(dwdx_3) * dt,
+                                       xh, kh, mode=mode)
+    dx = (dwdk_1+2*dwdk_2+2*dwdk_3+dwdk_4)*dt/6/(Rs_km*1e3)
+    dk = -(dwdx_1+2*dwdx_2+2*dwdx_3+dwdx_4)*dt/6
+    print('dx [Rs]: ', dx)
+    print('dk [1/m]: ', dk)
+    pos_new = pos_tmp + dx
+    k_new = k_tmp + dk
+
+    return pos_new, k_new, omega_0
+
 
 # %%
 # ++++++++++++++++++++++++ User Define +++++++++++++++++++++++++++++++++++++
-pos_ini = np.array([15., 0., 15.])  # Rs
-k_ini = np.array([1., -1., 1.])*1e-5  # 1/m
+pos_ini = np.array([9.5, 0., 0.])  # Rs
+k_ini = np.array([1., 1., 1.])*1e-5  # 1/m
 xh = 0.1  # Rs
 kh = 1e-6  # 1/m
-mode = 'Slow'
-direction = 'Backward'
+mode = 'Alfven'
+direction = 'Forward'
 
 dt = 60*10.   # s
-Nt = 100  # steps
+Nt = 200  # steps
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 B_ini = get_B(pos_ini).squeeze() # G
@@ -228,7 +251,7 @@ omegai_list.append(omega_i_ini)
 
 for nt in range(Nt):
     print('-----------------Nt = ' + str(nt) + '------------------')
-    pos_new, k_new, omega = step_on(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction)
+    pos_new, k_new, omega = step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction)
     print('pos_tmp: ', pos_tmp, 'k_tmp: ', k_tmp)
     pos_tmp = pos_new
     k_tmp = k_new
