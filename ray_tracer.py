@@ -107,7 +107,7 @@ def get_derivative(pos, k, xh, kh, mode='Alfven'):
                             get_Vsw(pos),
                             get_Cs(pos),
                             k, mode=mode, )
-    print('omega_x0k0: ', omega_x0k0)
+    # print('omega_x0k0: ', omega_x0k0)
 
     domega_dx_k0_x = (calc_omega(get_Va(pos + [xh, 0, 0]),
                                  get_Vsw(pos + [xh, 0, 0]),
@@ -148,8 +148,8 @@ def get_derivative(pos, k, xh, kh, mode='Alfven'):
                                   k + [0, 0, kh], mode=mode)
                        - calc_omega(get_Va(pos), get_Vsw(pos), get_Cs(pos),
                                     k - [0, 0, kh], mode=mode)) / (2 * kh)
-    print('domega_dx [m/s]: ', [domega_dx_k0_x, domega_dx_k0_y, domega_dx_k0_z])  # m/s
-    print('domega_dk [1/ms]: ', [domega_dk_x0_kx, domega_dk_x0_ky, domega_dk_x0_kz])  # 1/(m*s)
+    # print('domega_dx [m/s]: ', [domega_dx_k0_x, domega_dx_k0_y, domega_dx_k0_z])  # m/s
+    # print('domega_dk [1/ms]: ', [domega_dk_x0_kx, domega_dk_x0_ky, domega_dk_x0_kz])  # 1/(m*s)
 
     return np.array([domega_dx_k0_x, domega_dx_k0_y, domega_dx_k0_z]).squeeze(), \
         np.array([domega_dk_x0_kx, domega_dk_x0_ky, domega_dk_x0_kz]).squeeze(), \
@@ -195,18 +195,53 @@ def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
 
     return pos_new, k_new, omega_0
 
+def step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward',error=0.001):
+    if direction == 'Backward':
+        dt = -dt
+
+    dwdx_1, dwdk_1, omega_0 = get_derivative(pos_tmp, k_tmp, xh, kh, mode=mode)
+    dwdx_2, dwdk_2, _ = get_derivative(pos_tmp + np.array(dwdk_1) * dt/(Rs_km*1e3)/2,
+                                       k_tmp - np.array(dwdx_1) * dt/2,
+                                       xh, kh, mode=mode)
+    dwdx_3, dwdk_3, _ = get_derivative(pos_tmp + np.array(dwdk_2) * dt/(Rs_km*1e3)/2,
+                                       k_tmp - np.array(dwdx_2) * dt/2,
+                                       xh, kh, mode=mode)
+    dwdx_4, dwdk_4, _ = get_derivative(pos_tmp + np.array(dwdk_3) * dt/(Rs_km*1e3),
+                                       k_tmp - np.array(dwdx_3) * dt,
+                                       xh, kh, mode=mode)
+    dx = (dwdk_1+2*dwdk_2+2*dwdk_3+dwdk_4)*dt/6/(Rs_km*1e3)
+    dk = -(dwdx_1+2*dwdx_2+2*dwdx_3+dwdx_4)*dt/6
+
+    _,_,omega_new = get_derivative(pos_tmp+dx, k_tmp + dk, xh, kh, mode=mode)
+    n_half = 0
+    print(abs((omega_new-omega_0)/omega_0))
+    while abs((omega_new-omega_0)/omega_0) > error:
+        n_half += 1
+        print('Do Half')
+        dx = dx / 2.
+        dk = dk / 2.
+        _, _, omega_new = get_derivative(pos_tmp+dx, k_tmp+dk,xh,kh,mode=mode)
+
+    print('dx [Rs]: ', dx)
+    print('dk [1/m]: ', dk)
+    print('Half Times: ', n_half)
+    pos_new = pos_tmp + dx
+    k_new = k_tmp + dk
+
+    return pos_new, k_new, omega_0
+
 
 # %%
 # ++++++++++++++++++++++++ User Define +++++++++++++++++++++++++++++++++++++
-pos_ini = np.array([9.5, 0., 0.])  # Rs
-k_ini = np.array([1., 1., 1.])*1e-5  # 1/m
+pos_ini = np.array([15., 0., 0.])  # Rs
+k_ini = np.array([5., 0., 0.])*1e-5  # 1/m
 xh = 0.1  # Rs
 kh = 1e-6  # 1/m
 mode = 'Alfven'
-direction = 'Forward'
-
+direction = 'Backward'
+error = 1.e-3
 dt = 60*10.   # s
-Nt = 200  # steps
+Nt = 300  # steps
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 B_ini = get_B(pos_ini).squeeze() # G
@@ -251,7 +286,7 @@ omegai_list.append(omega_i_ini)
 
 for nt in range(Nt):
     print('-----------------Nt = ' + str(nt) + '------------------')
-    pos_new, k_new, omega = step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction)
+    pos_new, k_new, omega = step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction,error=error)
     print('pos_tmp: ', pos_tmp, 'k_tmp: ', k_tmp)
     pos_tmp = pos_new
     k_tmp = k_new
@@ -342,7 +377,7 @@ box_grid.point_data['lg(Rho)'] = lgRho.ravel('F')
 p = pv.Plotter()
 p.add_mesh(pos_line.tube(radius=0.1))
 p.add_arrows(pos_list, B_list, mag=1e3,color='black')
-p.add_arrows(pos_list, k_list, mag=1e5,color='blue')
+p.add_arrows(pos_list, k_list, mag=1e3,color='blue')
 p.add_mesh_slice_orthogonal(box_grid, clim=[-22, -15], cmap='jet')
 p.show_grid()
 p.show_axes()
