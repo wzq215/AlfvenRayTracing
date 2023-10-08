@@ -1,6 +1,10 @@
-from spacepy.pybats import IdlFile
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from scipy.interpolate import interpn
+from tqdm import tqdm
+
+from spacepy.pybats import IdlFile
 
 Rs_km = 696300  # km
 
@@ -49,7 +53,6 @@ d_i = 2.28e7 / np.sqrt(data_box['Rho'] / mp) * 1e-2  # m
 omega_i = 1.32e3 * np.sqrt(data_box['Rho'] / mp)  # rad/sec
 
 
-
 # %%
 def calc_omega(Va_vec, Vsw_vec, Cs, k_vec, mode='Alfven'):
     if mode == 'Alfven':
@@ -77,6 +80,7 @@ def calc_omega(Va_vec, Vsw_vec, Cs, k_vec, mode='Alfven'):
         return None
 
     return omega_
+
 
 def get_B(pos):
     return np.array([interpn((gridx_Rs, gridy_Rs, gridz_Rs), data_box['Bx'], pos),
@@ -160,34 +164,35 @@ def step_on(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
     dwdx, dwdk, omega = get_derivative(pos_tmp, k_tmp, xh, kh, mode=mode)
     dx = np.array(dwdk) * dt  # m
     dk = -np.array(dwdx) * dt  # 1/m
-    print('dx [Rs]: ', dx/(Rs_km*1e3))
+    print('dx [Rs]: ', dx / (Rs_km * 1e3))
     print('dk [1/m]: ', dk)
     if direction == 'Forward':
-        pos_new = pos_tmp + dx/(Rs_km*1e3)
+        pos_new = pos_tmp + dx / (Rs_km * 1e3)
         k_new = k_tmp + dk
     elif direction == 'Backward':
-        pos_new = pos_tmp - dx/(Rs_km*1e3)
+        pos_new = pos_tmp - dx / (Rs_km * 1e3)
         k_new = k_tmp - dk
     else:
         return None
     return pos_new, k_new, omega
+
 
 def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
     if direction == 'Backward':
         dt = -dt
 
     dwdx_1, dwdk_1, omega_0 = get_derivative(pos_tmp, k_tmp, xh, kh, mode=mode)
-    dwdx_2, dwdk_2, _ = get_derivative(pos_tmp + np.array(dwdk_1) * dt/(Rs_km*1e3)/2,
-                                       k_tmp - np.array(dwdx_1) * dt/2,
+    dwdx_2, dwdk_2, _ = get_derivative(pos_tmp + np.array(dwdk_1) * dt / (Rs_km * 1e3) / 2,
+                                       k_tmp - np.array(dwdx_1) * dt / 2,
                                        xh, kh, mode=mode)
-    dwdx_3, dwdk_3, _ = get_derivative(pos_tmp + np.array(dwdk_2) * dt/(Rs_km*1e3)/2,
-                                       k_tmp - np.array(dwdx_2) * dt/2,
+    dwdx_3, dwdk_3, _ = get_derivative(pos_tmp + np.array(dwdk_2) * dt / (Rs_km * 1e3) / 2,
+                                       k_tmp - np.array(dwdx_2) * dt / 2,
                                        xh, kh, mode=mode)
-    dwdx_4, dwdk_4, _ = get_derivative(pos_tmp + np.array(dwdk_3) * dt/(Rs_km*1e3),
+    dwdx_4, dwdk_4, _ = get_derivative(pos_tmp + np.array(dwdk_3) * dt / (Rs_km * 1e3),
                                        k_tmp - np.array(dwdx_3) * dt,
                                        xh, kh, mode=mode)
-    dx = (dwdk_1+2*dwdk_2+2*dwdk_3+dwdk_4)*dt/6/(Rs_km*1e3)
-    dk = -(dwdx_1+2*dwdx_2+2*dwdx_3+dwdx_4)*dt/6
+    dx = (dwdk_1 + 2 * dwdk_2 + 2 * dwdk_3 + dwdk_4) * dt / 6 / (Rs_km * 1e3)
+    dk = -(dwdx_1 + 2 * dwdx_2 + 2 * dwdx_3 + dwdx_4) * dt / 6
     print('dx [Rs]: ', dx)
     print('dk [1/m]: ', dk)
     pos_new = pos_tmp + dx
@@ -195,190 +200,365 @@ def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
 
     return pos_new, k_new, omega_0
 
-def step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward',error=0.001):
+
+def step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward', error=0.001, print_details=False):
     if direction == 'Backward':
         dt = -dt
 
     dwdx_1, dwdk_1, omega_0 = get_derivative(pos_tmp, k_tmp, xh, kh, mode=mode)
-    dwdx_2, dwdk_2, _ = get_derivative(pos_tmp + np.array(dwdk_1) * dt/(Rs_km*1e3)/2,
-                                       k_tmp - np.array(dwdx_1) * dt/2,
+    dwdx_2, dwdk_2, _ = get_derivative(pos_tmp + np.array(dwdk_1) * dt / (Rs_km * 1e3) / 2,
+                                       k_tmp - np.array(dwdx_1) * dt / 2,
                                        xh, kh, mode=mode)
-    dwdx_3, dwdk_3, _ = get_derivative(pos_tmp + np.array(dwdk_2) * dt/(Rs_km*1e3)/2,
-                                       k_tmp - np.array(dwdx_2) * dt/2,
+    dwdx_3, dwdk_3, _ = get_derivative(pos_tmp + np.array(dwdk_2) * dt / (Rs_km * 1e3) / 2,
+                                       k_tmp - np.array(dwdx_2) * dt / 2,
                                        xh, kh, mode=mode)
-    dwdx_4, dwdk_4, _ = get_derivative(pos_tmp + np.array(dwdk_3) * dt/(Rs_km*1e3),
+    dwdx_4, dwdk_4, _ = get_derivative(pos_tmp + np.array(dwdk_3) * dt / (Rs_km * 1e3),
                                        k_tmp - np.array(dwdx_3) * dt,
                                        xh, kh, mode=mode)
-    dx = (dwdk_1+2*dwdk_2+2*dwdk_3+dwdk_4)*dt/6/(Rs_km*1e3)
-    dk = -(dwdx_1+2*dwdx_2+2*dwdx_3+dwdx_4)*dt/6
+    dx = (dwdk_1 + 2 * dwdk_2 + 2 * dwdk_3 + dwdk_4) * dt / 6 / (Rs_km * 1e3)
+    dk = -(dwdx_1 + 2 * dwdx_2 + 2 * dwdx_3 + dwdx_4) * dt / 6
 
-    _,_,omega_new = get_derivative(pos_tmp+dx, k_tmp + dk, xh, kh, mode=mode)
+    _, _, omega_new = get_derivative(pos_tmp + dx, k_tmp + dk, xh, kh, mode=mode)
     n_half = 0
-    print(abs((omega_new-omega_0)/omega_0))
-    while abs((omega_new-omega_0)/omega_0) > error:
+    while abs((omega_new - omega_0) / omega_0) > error:
         n_half += 1
-        print('Do Half')
+        if print_details:
+            print('Do Half')
         dx = dx / 2.
         dk = dk / 2.
-        _, _, omega_new = get_derivative(pos_tmp+dx, k_tmp+dk,xh,kh,mode=mode)
-
-    print('dx [Rs]: ', dx)
-    print('dk [1/m]: ', dk)
-    print('Half Times: ', n_half)
+        _, _, omega_new = get_derivative(pos_tmp + dx, k_tmp + dk, xh, kh, mode=mode)
+    if print_details:
+        print('dx [Rs]: ', dx)
+        print('dk [1/m]: ', dk)
+        print('Half Times: ', n_half)
     pos_new = pos_tmp + dx
     k_new = k_tmp + dk
 
     return pos_new, k_new, omega_0
 
 
-# %%
-# ++++++++++++++++++++++++ User Define +++++++++++++++++++++++++++++++++++++
-pos_ini = np.array([15., 0., 0.])  # Rs
-k_ini = np.array([5., 0., 0.])*1e-5  # 1/m
-xh = 0.1  # Rs
-kh = 1e-6  # 1/m
-mode = 'Alfven'
-direction = 'Backward'
-error = 1.e-3
-dt = 60*10.   # s
-Nt = 300  # steps
-# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-B_ini = get_B(pos_ini).squeeze() # G
-d_i_ini = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_ini)  # m
-omega_i_ini = interpn((gridx_Rs, gridy_Rs, gridz_Rs), omega_i, pos_ini)  # rad/sec
-kdi_ini = np.linalg.norm(k_ini) * d_i_ini  #
-theta_kb_ini = np.rad2deg(np.arccos(np.dot(B_ini, k_ini) / np.linalg.norm(B_ini) / np.linalg.norm(k_ini)))  # deg
+def appendSpherical_np(xyz):
+    ptsnew = np.hstack((xyz, np.zeros(xyz.shape)))
+    xy = xyz[:, 0] ** 2 + xyz[:, 1] ** 2
+    ptsnew[:, 3] = np.sqrt(xy + xyz[:, 2] ** 2)
+    # ptsnew[:,4] = np.arctan2(np.sqrt(xy), xyz[:,2]) # for elevation angle defined from Z-axis down
+    ptsnew[:, 4] = np.arctan2(xyz[:, 2], np.sqrt(xy))  # for elevation angle defined from XY-plane up
+    ptsnew[:, 5] = np.arctan2(xyz[:, 1], xyz[:, 0])
+    return ptsnew
 
 
+def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backward', error=1.e-3, dt=60 * 10., Nt=300,
+               visualize=False, print_details=False):
+    result_tag = mode + '_' + direction + '(pos_ini=[{:.2f}'.format(pos_ini[0]) \
+                 + '{:.2f}'.format(pos_ini[1]) + '{:.2f}'.format(pos_ini[2]) + ']' \
+                 + '_k_vec=[{:.2f}'.format(k_ini[0]) + '{:.2f}'.format(k_ini[1]) + '{:.2f}'.format(k_ini[2]) \
+                 + ']_xh=' + str(xh) + '_kh=' + str(kh) + ')'
 
-print('========INITIAL VALUE==========')
-print('Pos [Rs]: ', pos_ini)
-print('k_vec [1/m]: ',k_ini)
-print('B [Gs]: ', B_ini)
-print('d_i [m]: ', d_i_ini)
-print('w_i [1/s]: ', omega_i_ini)
-print('k*d_i: ', kdi_ini)
-print('theta_kb [deg]: ', theta_kb_ini)
-print('Mode: ', mode+'+'+direction)
-print('===============================')
+    B_ini = get_B(pos_ini).squeeze()  # G
+    d_i_ini = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_ini)  # m
+    omega_i_ini = interpn((gridx_Rs, gridy_Rs, gridz_Rs), omega_i, pos_ini)  # rad/sec
+    kdi_ini = np.linalg.norm(k_ini) * d_i_ini  #
+    theta_kb_ini = np.rad2deg(np.arccos(np.dot(B_ini, k_ini) / np.linalg.norm(B_ini) / np.linalg.norm(k_ini)))  # deg
 
-pos_tmp = pos_ini
-k_tmp = k_ini
+    print('========INITIAL VALUE==========')
+    print('Pos [Rs]: ', pos_ini)
+    print('k_vec [1/m]: ', k_ini)
+    print('B [Gs]: ', B_ini)
+    print('d_i [m]: ', d_i_ini)
+    print('w_i [1/s]: ', omega_i_ini)
+    print('k*d_i: ', kdi_ini)
+    print('theta_kb [deg]: ', theta_kb_ini)
+    print('Mode: ', mode + '+' + direction)
+    print('===============================')
 
-pos_list = []
-k_list = []
-omega_list = []
-B_list = []
-di_list = []
-kdi_list = []
-theta_kb_list = []
-omegai_list = []
+    pos_tmp = pos_ini
+    k_tmp = k_ini
 
-pos_list.append(pos_ini)
-k_list.append(k_ini)
-B_list.append(B_ini)
-di_list.append(d_i_ini)
-kdi_list.append(kdi_ini)
-theta_kb_list.append(theta_kb_ini)
-omegai_list.append(omega_i_ini)
-# %%
+    pos_list = []
+    k_list = []
+    omega_list = []
+    B_list = []
+    di_list = []
+    kdi_list = []
+    theta_kb_list = []
+    omegai_list = []
 
-for nt in range(Nt):
-    print('-----------------Nt = ' + str(nt) + '------------------')
-    pos_new, k_new, omega = step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction,error=error)
-    print('pos_tmp: ', pos_tmp, 'k_tmp: ', k_tmp)
-    pos_tmp = pos_new
-    k_tmp = k_new
+    pos_list.append(pos_ini)
+    k_list.append(k_ini)
+    B_list.append(B_ini)
+    di_list.append(d_i_ini)
+    kdi_list.append(kdi_ini)
+    theta_kb_list.append(theta_kb_ini)
+    omegai_list.append(omega_i_ini)
 
-    pos_list.append(pos_tmp)
-    k_list.append(k_tmp)
-    omega_list.append(omega)
+    for nt in tqdm(range(Nt)):
+        if print_details:
+            print('-----------------Nt = ' + str(nt) + '------------------')
+            print('pos_tmp: ', pos_tmp, 'k_tmp: ', k_tmp)
+        pos_new, k_new, omega = step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction,
+                                                  error=error)
 
-    B_tmp = get_B(pos_new).squeeze()  # Gs
-    di_tmp = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_new)  # m
-    wi_tmp = interpn((gridx_Rs, gridy_Rs, gridz_Rs), omega_i, pos_new)  # rad/sec
-    theta_kb_tmp = np.rad2deg(np.arccos(np.dot(B_tmp,k_tmp)/np.linalg.norm(B_tmp)/np.linalg.norm(k_tmp)))
+        pos_tmp = pos_new
+        k_tmp = k_new
 
-    B_list.append(B_tmp)
-    di_list.append(di_tmp)
-    kdi_list.append(np.linalg.norm(k_tmp)*di_tmp)
-    omegai_list.append(wi_tmp)
-    theta_kb_list.append(theta_kb_tmp)
+        pos_list.append(pos_tmp)
+        k_list.append(k_tmp)
+        omega_list.append(omega)
 
-    R_tmp = np.linalg.norm(pos_tmp)
-    if R_tmp < 1. or R_tmp > 24.:
-        print('Boundary Reached.')
-        break
+        B_tmp = get_B(pos_new).squeeze()  # Gs
+        di_tmp = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_new)  # m
+        wi_tmp = interpn((gridx_Rs, gridy_Rs, gridz_Rs), omega_i, pos_new)  # rad/sec
+        theta_kb_tmp = np.rad2deg(np.arccos(np.dot(B_tmp, k_tmp) / np.linalg.norm(B_tmp) / np.linalg.norm(k_tmp)))
 
-omega_last = calc_omega(get_Va(pos_tmp),
-                        get_Vsw(pos_tmp),
-                        get_Cs(pos_tmp),
-                        k_tmp, mode=mode, )  # rad/sec
-omega_list.append(omega_last)
-pos_list = np.array(pos_list)
-k_list = np.array(k_list)
-omega_list = np.array(omega_list).squeeze()
-B_list = np.array(B_list)
-omegai_list = np.array(omegai_list).squeeze()
-# %%
-import pandas as pd
+        B_list.append(B_tmp)
+        di_list.append(di_tmp)
+        kdi_list.append(np.linalg.norm(k_tmp) * di_tmp)
+        omegai_list.append(wi_tmp)
+        theta_kb_list.append(theta_kb_tmp)
 
-result = {'pos_x_Rs': pos_list[:, 0], 'pos_y_Rs': pos_list[:, 1], 'pos_z_Rs': pos_list[:, 2],
-          'Bx_G': B_list[:, 0], 'By_G': B_list[:, 1], 'Bz_G': B_list[:, 2],
-          'k_x_1/m': k_list[:, 0], 'k_y_1/m': k_list[:, 1], 'k_z_1/m': k_list[:, 2],
-          'omega_Hz': omega_list, 'd_i_m': di_list, 'omega_i_Hz': omegai_list}
-df = pd.DataFrame(result)
-df.to_csv('RESULT/test.csv')
+        R_tmp = np.linalg.norm(pos_tmp)
+        if R_tmp < 1. or R_tmp > 24.:
+            print('Boundary Reached.')
+            break
 
-# %%
-import matplotlib.pyplot as plt
+    omega_last = calc_omega(get_Va(pos_tmp),
+                            get_Vsw(pos_tmp),
+                            get_Cs(pos_tmp),
+                            k_tmp, mode=mode, )  # rad/sec
+    omega_list.append(omega_last)
+    pos_list = np.array(pos_list)
+    k_list = np.array(k_list)
+    omega_list = np.array(omega_list).squeeze()
+    B_list = np.array(B_list)
+    omegai_list = np.array(omegai_list).squeeze()
 
-pos_r_Rs = np.linalg.norm(pos_list,axis=1)
-plt.figure()
+    pos_xyz_rlatlon = appendSpherical_np(pos_list)
 
-plt.subplot(2,2,1)
-plt.plot(pos_r_Rs, omega_list)
-plt.xlabel('Radius [Rs]')
-plt.ylabel('omega [Hz]')
+    result = {'pos_x_Rs': pos_list[:, 0], 'pos_y_Rs': pos_list[:, 1], 'pos_z_Rs': pos_list[:, 2],
+              'pos_r_Rs': pos_xyz_rlatlon[:, 3], 'pos_lat_rad': pos_xyz_rlatlon[:, 4],
+              'pos_lon_rad': pos_xyz_rlatlon[:, 5],
+              'Bx_G': B_list[:, 0], 'By_G': B_list[:, 1], 'Bz_G': B_list[:, 2],
+              'k_x_1/m': k_list[:, 0], 'k_y_1/m': k_list[:, 1], 'k_z_1/m': k_list[:, 2],
+              'omega_Hz': omega_list, 'd_i_m': di_list, 'omega_i_Hz': omegai_list}
+    df = pd.DataFrame(result)
+    df.to_csv('RESULT/' + result_tag + '.csv')
+    print('Results saved to [' + 'RESULT/' + result_tag + '.csv]')
 
-plt.subplot(2,2,2)
-plt.plot(pos_r_Rs,kdi_list)
-plt.xlabel('Radius [Rs]')
-plt.ylabel('k*d_i')
+    pos_r_Rs = np.linalg.norm(pos_list, axis=1)
+    plt.figure()
 
-plt.subplot(2,2,3)
-plt.plot(pos_r_Rs,theta_kb_list)
-plt.xlabel('Radius [Rs]')
-plt.ylabel('theta_kb [deg]')
+    plt.subplot(2, 2, 1)
+    plt.plot(pos_r_Rs, omega_list)
+    plt.xlabel('Radius [Rs]')
+    plt.ylabel('omega [Hz]')
 
-plt.subplot(2,2,4)
-plt.plot(kdi_list,omega_list/omegai_list)
-plt.xlabel('k*d_i')
-plt.ylabel('omega/omega_i')
+    plt.subplot(2, 2, 2)
+    plt.plot(pos_r_Rs, kdi_list)
+    plt.xlabel('Radius [Rs]')
+    plt.ylabel('k*d_i')
 
-plt.suptitle('pos_ini='+str(pos_ini)+'Rs k_ini='+str(k_ini)+'m^-1\n mode='+mode+' direction='+direction)
-plt.show()
+    plt.subplot(2, 2, 3)
+    plt.plot(pos_r_Rs, theta_kb_list)
+    plt.xlabel('Radius [Rs]')
+    plt.ylabel('theta_kb [deg]')
 
-# %%
-import pyvista as pv
+    plt.subplot(2, 2, 4)
+    plt.plot(kdi_list, omega_list / omegai_list)
+    plt.xlabel('k*d_i')
+    plt.ylabel('omega/omega_i')
 
-pos_line = pv.lines_from_points(pos_list)
+    plt.suptitle(mode + '_' + direction + '\n(pos_ini=[{:.2f}'.format(pos_ini[0]) \
+                 + '{:.2f}'.format(pos_ini[1]) + '{:.2f}'.format(pos_ini[2]) + ']' \
+                 + '\nk_vec=[{:.2f}'.format(k_ini[0]) + '{:.2f}'.format(k_ini[1]) + '{:.2f}'.format(k_ini[2]) \
+                 + ']\nxh=' + str(xh) + '_kh=' + str(kh) + ')')
+    plt.tight_layout()
+    plt.savefig('export/' + result_tag + '.png')
+    if visualize:
+        plt.show()
+    plt.clf()
+    plt.close()
 
-dimensions = data_box['grid']
-spacing = (abs(gridx_Rs[1] - gridx_Rs[0]), abs(gridy_Rs[1] - gridy_Rs[0]), abs(gridz_Rs[1] - gridz_Rs[0]))
-origin = (gridx_Rs[0], gridy_Rs[0], gridz_Rs[0])
-box_grid = pv.UniformGrid(dimensions=(dimensions[0], dimensions[1], dimensions[2]), spacing=spacing,
-                          origin=origin)
-lgRho = np.log10(data_box['Rho'])
-lgRho[np.isinf(lgRho)] = np.nan
-box_grid.point_data['lg(Rho)'] = lgRho.ravel('F')
-# %%
-p = pv.Plotter()
-p.add_mesh(pos_line.tube(radius=0.1))
-p.add_arrows(pos_list, B_list, mag=1e3,color='black')
-p.add_arrows(pos_list, k_list, mag=1e3,color='blue')
-p.add_mesh_slice_orthogonal(box_grid, clim=[-22, -15], cmap='jet')
-p.show_grid()
-p.show_axes()
-p.show()
+    # %%
+    if visualize:
+        import pyvista as pv
+
+        pos_line = pv.lines_from_points(pos_list)
+
+        dimensions = data_box['grid']
+        spacing = (abs(gridx_Rs[1] - gridx_Rs[0]), abs(gridy_Rs[1] - gridy_Rs[0]), abs(gridz_Rs[1] - gridz_Rs[0]))
+        origin = (gridx_Rs[0], gridy_Rs[0], gridz_Rs[0])
+        box_grid = pv.UniformGrid(dimensions=(dimensions[0], dimensions[1], dimensions[2]), spacing=spacing,
+                                  origin=origin)
+        lgRho = np.log10(data_box['Rho'])
+        lgRho[np.isinf(lgRho)] = np.nan
+        box_grid.point_data['lg(Rho)'] = lgRho.ravel('F')
+        # %%
+        p = pv.Plotter()
+        p.add_mesh(pos_line.tube(radius=0.1))
+        p.add_arrows(pos_list, B_list, mag=1e3, color='black')
+        p.add_arrows(pos_list, k_list, mag=1e3, color='blue')
+        p.add_mesh_slice_orthogonal(box_grid, clim=[-22, -15], cmap='jet')
+        p.show_grid()
+        p.show_axes()
+        p.show()
+
+
+if __name__ == '__main__':
+    # ++++++++++++++++++++++++ User Define +++++++++++++++++++++++++++++++++++++
+    pos_ini = np.array([15., 0., 0.])  # Rs
+    k_ini = np.array([5., 0., 0.]) * 1e-5  # 1/m
+    xh = 0.1  # Rs
+    kh = 1e-6  # 1/m
+    mode = 'Alfven'
+    direction = 'Backward'
+    error = 1.e-3
+    dt = 60 * 10.  # s
+    Nt = 300  # steps
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    for theta in np.linspace(0, np.pi * 2, 15):
+        pos_ini = np.array([15. * np.cos(theta), 15. * np.sin(theta), 0.])
+        k_ini = np.array([5. * np.cos(theta+np.pi/2), 5. * np.sin(theta+np.pi/2), 0.]) * 1.e-5
+        ray_tracer(pos_ini, k_ini)
+    # result_tag = mode+'_'+direction+'(pos_ini='+str(pos_ini)+'_k_vec='+str(k_ini)+'_xh='+str(xh)+'_kh='+str(kh)+')'
+    #
+    # B_ini = get_B(pos_ini).squeeze() # G
+    # d_i_ini = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_ini)  # m
+    # omega_i_ini = interpn((gridx_Rs, gridy_Rs, gridz_Rs), omega_i, pos_ini)  # rad/sec
+    # kdi_ini = np.linalg.norm(k_ini) * d_i_ini  #
+    # theta_kb_ini = np.rad2deg(np.arccos(np.dot(B_ini, k_ini) / np.linalg.norm(B_ini) / np.linalg.norm(k_ini)))  # deg
+    #
+    #
+    #
+    # print('========INITIAL VALUE==========')
+    # print('Pos [Rs]: ', pos_ini)
+    # print('k_vec [1/m]: ',k_ini)
+    # print('B [Gs]: ', B_ini)
+    # print('d_i [m]: ', d_i_ini)
+    # print('w_i [1/s]: ', omega_i_ini)
+    # print('k*d_i: ', kdi_ini)
+    # print('theta_kb [deg]: ', theta_kb_ini)
+    # print('Mode: ', mode+'+'+direction)
+    # print('===============================')
+    #
+    #
+    #
+    # pos_tmp = pos_ini
+    # k_tmp = k_ini
+    #
+    # pos_list = []
+    # k_list = []
+    # omega_list = []
+    # B_list = []
+    # di_list = []
+    # kdi_list = []
+    # theta_kb_list = []
+    # omegai_list = []
+    #
+    # pos_list.append(pos_ini)
+    # k_list.append(k_ini)
+    # B_list.append(B_ini)
+    # di_list.append(d_i_ini)
+    # kdi_list.append(kdi_ini)
+    # theta_kb_list.append(theta_kb_ini)
+    # omegai_list.append(omega_i_ini)
+    # # %%
+    #
+    # for nt in range(Nt):
+    #     print('-----------------Nt = ' + str(nt) + '------------------')
+    #     pos_new, k_new, omega = step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction,error=error)
+    #     print('pos_tmp: ', pos_tmp, 'k_tmp: ', k_tmp)
+    #     pos_tmp = pos_new
+    #     k_tmp = k_new
+    #
+    #     pos_list.append(pos_tmp)
+    #     k_list.append(k_tmp)
+    #     omega_list.append(omega)
+    #
+    #     B_tmp = get_B(pos_new).squeeze()  # Gs
+    #     di_tmp = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_new)  # m
+    #     wi_tmp = interpn((gridx_Rs, gridy_Rs, gridz_Rs), omega_i, pos_new)  # rad/sec
+    #     theta_kb_tmp = np.rad2deg(np.arccos(np.dot(B_tmp,k_tmp)/np.linalg.norm(B_tmp)/np.linalg.norm(k_tmp)))
+    #
+    #     B_list.append(B_tmp)
+    #     di_list.append(di_tmp)
+    #     kdi_list.append(np.linalg.norm(k_tmp)*di_tmp)
+    #     omegai_list.append(wi_tmp)
+    #     theta_kb_list.append(theta_kb_tmp)
+    #
+    #     R_tmp = np.linalg.norm(pos_tmp)
+    #     if R_tmp < 1. or R_tmp > 24.:
+    #         print('Boundary Reached.')
+    #         break
+    #
+    # omega_last = calc_omega(get_Va(pos_tmp),
+    #                         get_Vsw(pos_tmp),
+    #                         get_Cs(pos_tmp),
+    #                         k_tmp, mode=mode, )  # rad/sec
+    # omega_list.append(omega_last)
+    # pos_list = np.array(pos_list)
+    # k_list = np.array(k_list)
+    # omega_list = np.array(omega_list).squeeze()
+    # B_list = np.array(B_list)
+    # omegai_list = np.array(omegai_list).squeeze()
+    # # %%
+    # import pandas as pd
+    #
+    # result = {'pos_x_Rs': pos_list[:, 0], 'pos_y_Rs': pos_list[:, 1], 'pos_z_Rs': pos_list[:, 2],
+    #           'Bx_G': B_list[:, 0], 'By_G': B_list[:, 1], 'Bz_G': B_list[:, 2],
+    #           'k_x_1/m': k_list[:, 0], 'k_y_1/m': k_list[:, 1], 'k_z_1/m': k_list[:, 2],
+    #           'omega_Hz': omega_list, 'd_i_m': di_list, 'omega_i_Hz': omegai_list}
+    # df = pd.DataFrame(result)
+    # df.to_csv('RESULT/'+result_tag+'.csv')
+    #
+    # # %%
+    # import matplotlib.pyplot as plt
+    #
+    # pos_r_Rs = np.linalg.norm(pos_list,axis=1)
+    # plt.figure()
+    #
+    # plt.subplot(2,2,1)
+    # plt.plot(pos_r_Rs, omega_list)
+    # plt.xlabel('Radius [Rs]')
+    # plt.ylabel('omega [Hz]')
+    #
+    # plt.subplot(2,2,2)
+    # plt.plot(pos_r_Rs,kdi_list)
+    # plt.xlabel('Radius [Rs]')
+    # plt.ylabel('k*d_i')
+    #
+    # plt.subplot(2,2,3)
+    # plt.plot(pos_r_Rs,theta_kb_list)
+    # plt.xlabel('Radius [Rs]')
+    # plt.ylabel('theta_kb [deg]')
+    #
+    # plt.subplot(2,2,4)
+    # plt.plot(kdi_list,omega_list/omegai_list)
+    # plt.xlabel('k*d_i')
+    # plt.ylabel('omega/omega_i')
+    #
+    # plt.suptitle('pos_ini='+str(pos_ini)+'Rs k_ini='+str(k_ini)+'m^-1\n mode='+mode+' direction='+direction)
+    # plt.show()
+    #
+    # # %%
+    # import pyvista as pv
+    #
+    # pos_line = pv.lines_from_points(pos_list)
+    #
+    # dimensions = data_box['grid']
+    # spacing = (abs(gridx_Rs[1] - gridx_Rs[0]), abs(gridy_Rs[1] - gridy_Rs[0]), abs(gridz_Rs[1] - gridz_Rs[0]))
+    # origin = (gridx_Rs[0], gridy_Rs[0], gridz_Rs[0])
+    # box_grid = pv.UniformGrid(dimensions=(dimensions[0], dimensions[1], dimensions[2]), spacing=spacing,
+    #                           origin=origin)
+    # lgRho = np.log10(data_box['Rho'])
+    # lgRho[np.isinf(lgRho)] = np.nan
+    # box_grid.point_data['lg(Rho)'] = lgRho.ravel('F')
+    # # %%
+    # p = pv.Plotter()
+    # p.add_mesh(pos_line.tube(radius=0.1))
+    # p.add_arrows(pos_list, B_list, mag=1e3,color='black')
+    # p.add_arrows(pos_list, k_list, mag=1e3,color='blue')
+    # p.add_mesh_slice_orthogonal(box_grid, clim=[-22, -15], cmap='jet')
+    # p.show_grid()
+    # p.show_axes()
+    # p.show()
