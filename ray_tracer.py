@@ -10,8 +10,9 @@ Rs_km = 696300  # km
 
 # %%
 data_path = '/Users/ephe/THL8/Test_SC230315_2304/output_SC_230315/SC/'
+data_path = '/Users/ephe/THL8/RayTracing/output_01/SC/'
 file_type = 'box_mhd_4_'
-n_iter = 6000
+n_iter = 5900
 n_time = None
 
 filename = file_type + 'n' + str(int(n_iter)).zfill(8)
@@ -34,7 +35,7 @@ Vax[np.isnan(Vax)] = 0.
 Vay[np.isnan(Vay)] = 0.
 Vaz[np.isnan(Vaz)] = 0.
 
-Vswx = np.array(data_box['Ux']) * 1e3  # m/s
+Vswx = np.array(data_box['Ux']) * 1e3  # m /s
 Vswy = np.array(data_box['Uy']) * 1e3
 Vswz = np.array(data_box['Uz']) * 1e3
 Vswx[np.isnan(Vswx)] = 0.
@@ -175,6 +176,12 @@ def step_on(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
     else:
         return None
     return pos_new, k_new, omega
+
+def query_ini_k(pos_ini, k_test, vel_ini, xh, kh, mode='Alfven',direction='Forward'):
+    dwdx, dwdk, omega = get_derivative(pos_ini,k_test,xh,kh,mode=mode)
+    print('dwdk (km/s)=',dwdk/1e3)
+    print('vel_ini (km/s)=',vel_ini)
+
 
 
 def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
@@ -347,32 +354,42 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
     pos_r_Rs = np.linalg.norm(pos_list, axis=1)
     plt.figure()
 
-    plt.subplot(2, 2, 1)
+    plt.subplot(3, 2, 1)
     plt.plot(pos_r_Rs, omega_list)
     plt.xlabel('Radius [Rs]')
     plt.ylabel('omega [Hz]')
 
-    plt.subplot(2, 2, 2)
+    plt.subplot(3, 2, 2)
     plt.plot(pos_r_Rs, kdi_list)
     plt.xlabel('Radius [Rs]')
     plt.ylabel('k*d_i')
 
-    plt.subplot(2, 2, 3)
+    plt.subplot(3, 2, 3)
     plt.plot(pos_r_Rs, theta_kb_list)
     plt.xlabel('Radius [Rs]')
     plt.ylabel('theta_kb [deg]')
 
-    plt.subplot(2, 2, 4)
+    plt.subplot(3, 2, 4)
     plt.plot(kdi_list, omega_list / omegai_list)
     plt.xlabel('k*d_i')
     plt.ylabel('omega/omega_i')
+
+    plt.subplot(3,1,3)
+    plt.plot(pos_list[:, 0],label='x')
+    plt.plot(pos_list[:,1],label='y')
+    plt.plot(pos_list[:, 2], label='z')
+    plt.xlabel('step')
+    plt.ylabel('pos')
+    plt.legend()
+
+
 
     plt.suptitle(mode + '_' + direction + '\n(pos_ini=[{:.2f}'.format(pos_ini[0]) \
                  + '{:.2f}'.format(pos_ini[1]) + '{:.2f}'.format(pos_ini[2]) + ']' \
                  + '\nk_vec=[{:.2f}'.format(k_ini[0]) + '{:.2f}'.format(k_ini[1]) + '{:.2f}'.format(k_ini[2]) \
                  + ']\nxh=' + str(xh) + '_kh=' + str(kh) + ')')
     plt.tight_layout()
-    plt.savefig('export/' + result_tag + '.png')
+    plt.savefig('export/TW_1/' + result_tag + '.pdf')
     if visualize:
         plt.show()
     plt.clf()
@@ -402,6 +419,8 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
         p.show_axes()
         p.show()
 
+    return df
+
 
 if __name__ == '__main__':
     # ++++++++++++++++++++++++ User Define +++++++++++++++++++++++++++++++++++++
@@ -416,10 +435,10 @@ if __name__ == '__main__':
     Nt = 300  # steps
     # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-    for theta in np.linspace(0, np.pi * 2, 15):
+    for theta in np.linspace(0, np.pi * 2, 5):
         pos_ini = np.array([15. * np.cos(theta), 15. * np.sin(theta), 0.])
         k_ini = np.array([5. * np.cos(theta+np.pi/2), 5. * np.sin(theta+np.pi/2), 0.]) * 1.e-5
-        ray_tracer(pos_ini, k_ini)
+        ray_tracer(pos_ini, k_ini,visualize=True)
     # result_tag = mode+'_'+direction+'(pos_ini='+str(pos_ini)+'_k_vec='+str(k_ini)+'_xh='+str(xh)+'_kh='+str(kh)+')'
     #
     # B_ini = get_B(pos_ini).squeeze() # G
