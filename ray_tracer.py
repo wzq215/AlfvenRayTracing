@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,8 +13,9 @@ Rs_km = 696300  # km
 # %%
 data_path = '/Users/ephe/THL8/Test_SC230315_2304/output_SC_230315/SC/'
 data_path = '/Users/ephe/THL8/RayTracing/output_01/SC/'
+data_path = '/Users/ephe/THL8/RayTracing/run_1023/'
 file_type = 'box_mhd_4_'
-n_iter = 5900
+n_iter = 10000
 n_time = None
 
 filename = file_type + 'n' + str(int(n_iter)).zfill(8)
@@ -161,10 +164,13 @@ def get_derivative(pos, k, xh, kh, mode='Alfven'):
         omega_x0k0
 
 
-def step_on(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
+def step_on(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward',sun_rotation=True):
     dwdx, dwdk, omega = get_derivative(pos_tmp, k_tmp, xh, kh, mode=mode)
     dx = np.array(dwdk) * dt  # m
     dk = -np.array(dwdx) * dt  # 1/m
+    if sun_rotation:
+        sun_rotation_omega = 2*np.pi/(27*24*3600) #rad/s
+        dx += np.array([pos_tmp[1]*sun_rotation_omega*dt,-pos_tmp[0]*sun_rotation_omega*dt,0.])
     print('dx [Rs]: ', dx / (Rs_km * 1e3))
     print('dk [1/m]: ', dk)
     if direction == 'Forward':
@@ -184,7 +190,7 @@ def query_ini_k(pos_ini, k_test, vel_ini, xh, kh, mode='Alfven',direction='Forwa
 
 
 
-def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
+def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward',sun_rotation=True):
     if direction == 'Backward':
         dt = -dt
 
@@ -200,6 +206,9 @@ def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
                                        xh, kh, mode=mode)
     dx = (dwdk_1 + 2 * dwdk_2 + 2 * dwdk_3 + dwdk_4) * dt / 6 / (Rs_km * 1e3)
     dk = -(dwdx_1 + 2 * dwdx_2 + 2 * dwdx_3 + dwdx_4) * dt / 6
+    if sun_rotation:
+        sun_rotation_omega = 2*np.pi/(27*24*3600) #rad/s
+        dx += np.array([pos_tmp[1]*sun_rotation_omega*dt,-pos_tmp[0]*sun_rotation_omega*dt,0.])
     print('dx [Rs]: ', dx)
     print('dk [1/m]: ', dk)
     pos_new = pos_tmp + dx
@@ -208,7 +217,7 @@ def step_on_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward'):
     return pos_new, k_new, omega_0
 
 
-def step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward', error=0.001, print_details=False):
+def step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forward', error=0.001, print_details=False,sun_rotation=True):
     if direction == 'Backward':
         dt = -dt
 
@@ -224,6 +233,9 @@ def step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forw
                                        xh, kh, mode=mode)
     dx = (dwdk_1 + 2 * dwdk_2 + 2 * dwdk_3 + dwdk_4) * dt / 6 / (Rs_km * 1e3)
     dk = -(dwdx_1 + 2 * dwdx_2 + 2 * dwdx_3 + dwdx_4) * dt / 6
+    if sun_rotation:
+        sun_rotation_omega = 2*np.pi/(27*24*3600) #rad/s
+        dx += np.array([pos_tmp[1]*sun_rotation_omega*dt,-pos_tmp[0]*sun_rotation_omega*dt,0.])
 
     _, _, omega_new = get_derivative(pos_tmp + dx, k_tmp + dk, xh, kh, mode=mode)
     n_half = 0
@@ -241,7 +253,7 @@ def step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode='Alfven', direction='Forw
     pos_new = pos_tmp + dx
     k_new = k_tmp + dk
 
-    return pos_new, k_new, omega_0
+    return pos_new, k_new, omega_0, n_half
 
 
 def appendSpherical_np(xyz):
@@ -255,11 +267,17 @@ def appendSpherical_np(xyz):
 
 
 def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backward', error=1.e-3, dt=60 * 10., Nt=300,
-               visualize=False, print_details=False):
-    result_tag = mode + '_' + direction + '(pos_ini=[{:.2f}'.format(pos_ini[0]) \
+               visualize=False, print_details=False,sun_rotation=True,
+               export_fig_path='export/TW_figures/',export_result_path='export/TW_results/',result_tag=None):
+    os.makedirs(export_fig_path,exist_ok=True)
+    os.makedirs(export_result_path,exist_ok=True)
+    if result_tag == None:
+        result_tag = mode + '_' + direction + '(pos_ini=[{:.2f}'.format(pos_ini[0]) \
                  + '{:.2f}'.format(pos_ini[1]) + '{:.2f}'.format(pos_ini[2]) + ']' \
                  + '_k_vec=[{:.2f}'.format(k_ini[0]) + '{:.2f}'.format(k_ini[1]) + '{:.2f}'.format(k_ini[2]) \
                  + ']_xh=' + str(xh) + '_kh=' + str(kh) + ')'
+    else:
+        result_tag = mode+'_'+direction+'_'+result_tag+'_xh=' + str(xh) + '_kh=' + str(kh) + ')'
 
     B_ini = get_B(pos_ini).squeeze()  # G
     d_i_ini = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_ini)  # m
@@ -289,6 +307,7 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
     kdi_list = []
     theta_kb_list = []
     omegai_list = []
+    n_half_list = []
 
     pos_list.append(pos_ini)
     k_list.append(k_ini)
@@ -297,13 +316,14 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
     kdi_list.append(kdi_ini)
     theta_kb_list.append(theta_kb_ini)
     omegai_list.append(omega_i_ini)
+    n_half_list.append(0)
 
     for nt in tqdm(range(Nt)):
         if print_details:
             print('-----------------Nt = ' + str(nt) + '------------------')
             print('pos_tmp: ', pos_tmp, 'k_tmp: ', k_tmp)
-        pos_new, k_new, omega = step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction,
-                                                  error=error)
+        pos_new, k_new, omega, n_half = step_on_adapt_RK4(pos_tmp, k_tmp, xh, kh, dt, mode=mode, direction=direction,
+                                                  error=error,sun_rotation=sun_rotation)
 
         pos_tmp = pos_new
         k_tmp = k_new
@@ -311,6 +331,7 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
         pos_list.append(pos_tmp)
         k_list.append(k_tmp)
         omega_list.append(omega)
+        n_half_list.append(n_half)
 
         B_tmp = get_B(pos_new).squeeze()  # Gs
         di_tmp = interpn((gridx_Rs, gridy_Rs, gridz_Rs), d_i, pos_new)  # m
@@ -338,6 +359,7 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
     omega_list = np.array(omega_list).squeeze()
     B_list = np.array(B_list)
     omegai_list = np.array(omegai_list).squeeze()
+    n_half_list = np.array(n_half_list).squeeze()
 
     pos_xyz_rlatlon = appendSpherical_np(pos_list)
 
@@ -346,10 +368,11 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
               'pos_lon_rad': pos_xyz_rlatlon[:, 5],
               'Bx_G': B_list[:, 0], 'By_G': B_list[:, 1], 'Bz_G': B_list[:, 2],
               'k_x_1/m': k_list[:, 0], 'k_y_1/m': k_list[:, 1], 'k_z_1/m': k_list[:, 2],
-              'omega_Hz': omega_list, 'd_i_m': di_list, 'omega_i_Hz': omegai_list}
+              'omega_Hz': omega_list, 'd_i_m': di_list, 'omega_i_Hz': omegai_list,
+              'n_half': n_half_list}
     df = pd.DataFrame(result)
-    df.to_csv('RESULT/' + result_tag + '.csv')
-    print('Results saved to [' + 'RESULT/' + result_tag + '.csv]')
+    df.to_csv(export_result_path + result_tag + '.csv')
+    print('Results saved to [' + export_result_path + result_tag + '.csv]')
 
     pos_r_Rs = np.linalg.norm(pos_list, axis=1)
     plt.figure()
@@ -383,17 +406,17 @@ def ray_tracer(pos_ini, k_ini, xh=0.1, kh=1.e-6, mode='Alfven', direction='Backw
     plt.legend()
 
 
-
-    plt.suptitle(mode + '_' + direction + '\n(pos_ini=[{:.2f}'.format(pos_ini[0]) \
-                 + '{:.2f}'.format(pos_ini[1]) + '{:.2f}'.format(pos_ini[2]) + ']' \
-                 + '\nk_vec=[{:.2f}'.format(k_ini[0]) + '{:.2f}'.format(k_ini[1]) + '{:.2f}'.format(k_ini[2]) \
-                 + ']\nxh=' + str(xh) + '_kh=' + str(kh) + ')')
+    plt.suptitle(result_tag)
+    plt.gca().text(1,-0.3,'(pos_ini=[{:.2f}'.format(pos_ini[0]) + '{:.2f}'.format(pos_ini[1]) + '{:.2f}'.format(pos_ini[2]) + ']' \
+                 + '\nk_vec=[{:.2e}'.format(k_ini[0]) + '{:.2e}'.format(k_ini[1]) + '{:.2e}'.format(k_ini[2]) \
+                 + ']\nxh=' + str(xh) + '_kh=' + str(kh) + ')',horizontalalignment='right',verticalalignment='top',transform=plt.gca().transAxes)
     plt.tight_layout()
-    plt.savefig('export/TW_1/' + result_tag + '.pdf')
+    plt.savefig(export_fig_path + result_tag + '.pdf')
     if visualize:
         plt.show()
     plt.clf()
     plt.close()
+
 
     # %%
     if visualize:

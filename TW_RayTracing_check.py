@@ -48,7 +48,7 @@ if __name__ == '__main__':
     # ++++++++++++++++++++++++ User Define +++++++++++++++++++++++++++++++++++++
 
     df = pd.read_csv('TW_wave_vector',sep='\t')
-    for i in [3,4]:
+    for i in range(len(df)):
     # i = 0
 
 
@@ -66,11 +66,20 @@ if __name__ == '__main__':
         # for theta in np.linspace(0, np.pi * 2, 5):
         #     pos_ini = np.array([15. * np.cos(theta), 15. * np.sin(theta), 0.])
         #     k_ini = np.array([5. * np.cos(theta+np.pi/2), 5. * np.sin(theta+np.pi/2), 0.]) * 1.e-5
-        for mode in ['Slow','Fast','Alfven']:
+        for mode in ['Slow']:
             for direction in ['Forward', 'Backward']:
+                if direction == 'Forward':
+                    reverse = 'Backward'
+                else:
+                    reverse = 'Forward'
                 result_df = ray_tracer(pos_ini, k_ini,visualize=False,mode=mode,direction=direction,xh=xh,kh=kh,error=error,dt=dt,Nt=Nt,
-                               result_tag='Case'+str(i+1),export_result_path='export/TW_coro_results/',export_fig_path='export/TW_coro_figures/')
+                               result_tag='Case'+str(i+1),export_result_path='export/TW_results/CR/',export_fig_path='export/TW_figures/CR/')
+                pos_fin = np.array([result_df['pos_x_Rs'][len(result_df)-10],result_df['pos_y_Rs'][len(result_df)-10],result_df['pos_z_Rs'][len(result_df)-10]])
+                k_fin = np.array([result_df['k_x_1/m'][len(result_df)-10],result_df['k_y_1/m'][len(result_df)-10],result_df['k_z_1/m'][len(result_df)-10]])
+                reverse_result_df = ray_tracer(pos_fin,k_fin,visualize=False,mode=mode,direction=reverse,xh=xh,kh=kh,error=error,dt=dt,Nt=Nt,
+                               result_tag='Case'+str(i+1)+'_reverse')
+
 #%%
-        plt.figure()
-        result_df.plot(subplots=True)
-        plt.show()
+        # plt.figure()
+        # result_df.plot(subplots=True)
+        # plt.show()
