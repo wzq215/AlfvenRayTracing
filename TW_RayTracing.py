@@ -48,7 +48,7 @@ if __name__ == '__main__':
     # ++++++++++++++++++++++++ User Define +++++++++++++++++++++++++++++++++++++
 
     df = pd.read_csv('TW_wave_vector',sep='\t')
-    for i in [3,4]:
+    for i in range(4):
     # i = 0
 
 

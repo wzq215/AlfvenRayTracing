@@ -68,18 +68,16 @@ def calc_omega(Va_vec, Vsw_vec, Cs, k_vec, mode='Alfven'):
         k_dot_Va = np.dot(k_vec, Va_vec)
         k_dot_Vsw = np.dot(k_vec, Vsw_vec)
         omega_ = np.sqrt((Cs ** 2 + Va_norm ** 2) * k_norm ** 2 / 2.
-                         + np.sqrt(
-            (Cs ** 2 + Va_norm ** 2) ** 2 * k_norm ** 4 - 4 * k_norm ** 2 * Cs ** 2 * k_dot_Va ** 2) / 2.
-                         + k_dot_Vsw ** 2)
+                         + np.sqrt((Cs ** 2 + Va_norm ** 2) ** 2 * k_norm ** 4
+                                   - 4 * k_norm ** 2 * Cs ** 2 * k_dot_Va ** 2) / 2.) + k_dot_Vsw
     elif mode == 'Slow':
         Va_norm = np.linalg.norm(Va_vec)
         k_norm = np.linalg.norm(k_vec)
         k_dot_Va = np.dot(k_vec, Va_vec)
         k_dot_Vsw = np.dot(k_vec, Vsw_vec)
         omega_ = np.sqrt((Cs ** 2 + Va_norm ** 2) * k_norm ** 2 / 2.
-                         - np.sqrt(
-            (Cs ** 2 + Va_norm ** 2) ** 2 * k_norm ** 4 - 4 * k_norm ** 2 * Cs ** 2 * k_dot_Va ** 2) / 2.
-                         + k_dot_Vsw ** 2)
+                         - np.sqrt((Cs ** 2 + Va_norm ** 2) ** 2 * k_norm ** 4
+                                   - 4 * k_norm ** 2 * Cs ** 2 * k_dot_Va ** 2) / 2.) + k_dot_Vsw
     else:
         return None
 

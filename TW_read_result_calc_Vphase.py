@@ -4,6 +4,7 @@ import numpy as np
 import spiceypy as spice
 import pandas as pd
 from datetime import datetime, timedelta
+from ray_tracer import get_Vsw
 
 
 
@@ -69,7 +70,8 @@ omega_i = 1.32e3 * np.sqrt(data_box['Rho'] / mp)  # rad/sec
 
 
 import pyvista as pv
-
+dt = 60 * 1.  # s
+Nt = 4000  # steps
 
 
 
@@ -103,7 +105,6 @@ def get_body_pos(bodyName, epochDt, coord='IAU_SUN'):
     bodyPos, _ = spice.spkpos(bodyName, epochEt, coord, 'NONE', 'SUN')
     return bodyPos
 
-
 startDt = datetime(2021,9,25)
 endDt = datetime(2021,10,23)
 stepDt = timedelta(hours=4)
@@ -126,93 +127,130 @@ for i in range(len(epochDt)):
 
 
 result_path = 'export/TW_coro_results/'
-
-cm=1/2.54
-# plt.figure()
-fig, ax = plt.subplots(dpi=300,figsize=(18*cm,6*cm),)
-ax2 = ax.twinx()
-fig.subplots_adjust(right=0.6,left=0.15,bottom=0.2,top=0.8)
-# plt.tight_layout()
-colors = ['#4575B4', '#D73027', '#FC8D59', '#91BFDB', '#FEE090']
+color_list = ['#1f77b4',  # 蓝色
+              '#ff7f0e',  # 橙色
+              '#2ca02c',  # 绿色
+              '#d62728',  # 红色
+              '#9467bd']  # 紫色
+plt.figure(dpi=300,figsize=(8,8))
 for i in range(5):
-    # plt.subplot(2,1,1)
     result_name = 'Slow_Forward_Case'+str(i+1)+'_xh=0.01_kh=1e-10).csv'
     result_df = pd.read_csv(result_path+result_name)
     pos_list = np.stack([result_df['pos_x_Rs'],result_df['pos_y_Rs'],result_df['pos_z_Rs']]).T
+    casePos = pos_list[0]
     B_list = np.stack([result_df['Bx_G'],result_df['By_G'],result_df['Bz_G']]).T
     k_list = np.stack([result_df['k_x_1/m'],result_df['k_y_1/m'],result_df['k_z_1/m']]).T
-    pos_r_list = np.array(result_df['pos_r_Rs'])
-    theta_kb_list = np.linspace(0,0,len(result_df))
-    relative_error = (abs(np.array(result_df['omega_i_Hz']) - result_df['omega_i_Hz'][0])) / result_df['omega_i_Hz'][0]
-    for j in range(len(result_df)):
-        theta_kb_list[j] = np.rad2deg(np.arccos(np.dot(B_list[j], k_list[j]) / np.linalg.norm(B_list[j]) / np.linalg.norm(k_list[j])))
-    # theta_kb_list[result_df['omega_i_H]
+    r_list = np.array(result_df['pos_r_Rs'])
+    V_list_slow_forward = []
+    V_list_slow_forward_pos = []
+    V_sw_r_lst = []
+    V_sw_lst = get_Vsw(pos_list)/1.e3
+    for i_pos, pos in enumerate(pos_list[:-1]):
+        V_pos = (pos_list[i_pos+1]-pos)/dt*Rs_km
+        V_pos_r = np.dot(V_pos, pos) / np.linalg.norm(pos)
+        V_list_slow_forward_pos.append(V_pos_r)
+        V_sw = V_sw_lst[:,i_pos]
+        V_sw_r = np.dot(V_sw, pos) / np.linalg.norm(pos)
+        V_sw_r_lst.append(V_sw_r)
+        if i_pos==0:
+            print(V_sw_r)
+        V_relative = V_pos-V_sw
+        V_relative_r = np.dot(V_relative, pos) / np.linalg.norm(pos)
+        V_list_slow_forward.append(V_relative_r)
+    plt.subplot(2, 1, 1)
+    plt.plot(r_list[:-1], V_sw_r_lst,'--',color=color_list[i],label='BG Vr Case'+str(i+1))
+    plt.scatter(r_list[:-1], V_list_slow_forward_pos,s=1,marker='+',color=color_list[i],label='Traced Vr Case'+str(i+1))
+    plt.subplot(2, 1, 2)
+    plt.scatter(r_list[:-1],V_list_slow_forward,s=1,marker='o',color=color_list[i],label='Relative Vr Case'+str(i+1))
 
-    ax.plot(pos_r_list, theta_kb_list,c=colors[i],linestyle='--',label='Forward_Case'+str(i+1),linewidth=2)
-    # ax2 = ax.twinx()
-    ax2.stackplot(pos_r_list, relative_error,color=colors[i],alpha=0.2,linewidth=0.5)
-
-
-
-
-
-
-
-    # result_name = 'Alfven_Forward_Case' + str(i + 1) + '_xh=0.01_kh=1e-10).csv'
-    # result_df = pd.read_csv(result_path + result_name)
-    # pos_list = np.stack([result_df['pos_x_Rs'], result_df['pos_y_Rs'], result_df['pos_z_Rs']]).T
-    # B_list = np.stack([result_df['Bx_G'], result_df['By_G'], result_df['Bz_G']]).T
-    # k_list = np.stack([result_df['k_x_1/m'], result_df['k_y_1/m'], result_df['k_z_1/m']]).T
-    # pos_line = pv.lines_from_points(pos_list)
-    # p.add_mesh(pos_line.tube(radius=0.2), color='lightblue',label='Alfven_Forward')
 
     result_name = 'Slow_Backward_Case'+str(i+1)+'_xh=0.01_kh=1e-10).csv'
     result_df = pd.read_csv(result_path+result_name)
     pos_list = np.stack([result_df['pos_x_Rs'],result_df['pos_y_Rs'],result_df['pos_z_Rs']]).T
     B_list = np.stack([result_df['Bx_G'],result_df['By_G'],result_df['Bz_G']]).T
     k_list = np.stack([result_df['k_x_1/m'],result_df['k_y_1/m'],result_df['k_z_1/m']]).T
-    pos_r_list = np.array(result_df['pos_r_Rs'])
-    theta_kb_list = np.linspace(0, 0, len(result_df))
-    relative_error = (abs(np.array(result_df['omega_i_Hz'])-result_df['omega_i_Hz'][0]))/result_df['omega_i_Hz'][0]
-    for j in range(len(result_df)):
-        theta_kb_list[j] = np.rad2deg(
-            np.arccos(np.dot(B_list[j], k_list[j]) / np.linalg.norm(B_list[j]) / np.linalg.norm(k_list[j])))
-    if sum(result_df['omega_i_Hz']>5.e6) > 0:
-        error_ind = np.where(result_df['omega_i_Hz']>5.e6)[0][0]
-    # theta_kb_list[result_df['omega_i_Hz']>2.e6] = np.nan
-        theta_kb_list[error_ind:]=np.nan
-    # error_ind = np.argwhere(theta_kb_list==np.nan)
-    # plt.subplot(2,1,1)
-    ax.plot(pos_r_list, theta_kb_list,c=colors[i],label='Backward_Case'+str(i+1))
-    # ax2 = ax.twinx()
-    ax2.stackplot(pos_r_list,relative_error,color=colors[i],alpha=0.2,linewidth=0.5)
-    # plt.subplot(2, 1, 2)
-    # plt.plot(pos_r_list, result_df['omega_i_Hz'])
+    if sum(result_df['omega_i_Hz'] > 2.e6)>0:
+        error_ind = np.where(result_df['omega_i_Hz'] > 2.e6)[0][0]
 
-ax.set_xlabel('r (Rs)',fontsize=7)
+    r_list = np.array(result_df['pos_r_Rs'])
+    V_list_slow_backward = []
+    V_list_slow_backward_pos = []
+    V_sw_r_lst = []
+    V_sw_lst = get_Vsw(pos_list)/1.e3
+    for i_pos, pos in enumerate(pos_list[:-1]):
+        V_pos = (pos-pos_list[i_pos + 1]) / dt * Rs_km
+        V_pos_r = np.dot(V_pos, pos) / np.linalg.norm(pos)
+        V_list_slow_backward_pos.append(V_pos_r)
+        V_sw = V_sw_lst[:, i_pos]
+        V_sw_r = np.dot(V_sw, pos) / np.linalg.norm(pos)
+        V_sw_r_lst.append(V_sw_r)
+        V_relative = V_pos - V_sw
+        V_relative_r = np.dot(V_relative, pos) / np.linalg.norm(pos)
+        V_list_slow_backward.append(V_relative_r)
+    plt.subplot(2, 1, 1)
+    plt.plot(r_list[:-1], V_sw_r_lst, '--', color=color_list[i])
+    plt.scatter(r_list[:-1], V_list_slow_backward_pos,s=1,marker='+', color=color_list[i])
+    plt.subplot(2, 1, 2)
+    plt.scatter(r_list[:-1], V_list_slow_backward, s=1, marker='o', color=color_list[i])
+
+plt.subplot(2,1,1)
 plt.xlim([1,20])
 
-ax.set_ylim([80,180])
-ax.set_yticks(np.arange(90,190,15))
-ax.set_yticklabels([str(t) for t in np.arange(90,190,15)],fontsize=7)
-
-ax.set_ylabel(r'$\theta_{kb}$ [$^{\circ}$]',fontsize=7)
-
-# ax2.set_yscale('log')
-ax2.set_ylabel('Trace Error, $\delta \omega/ \omega_0$',fontsize=7)
-ax2.set_ylim([0,20])
-ax2.set_yticks(np.arange(0,20,5))
-ax2.set_yticklabels([str(t) for t in np.arange(0,20,5)],fontsize=7)
-
-
-ax.set_xticks(np.arange(1,21,2))
-ax.set_xticklabels([str(t) for t in np.arange(1,21,2)],fontsize=7)
-ax.legend(ncol=1,bbox_to_anchor=(1.2, 0.5),
-         loc='center left',frameon=False,shadow=False,
-         borderaxespad=0.,fontsize=7)
-plt.title(r'$\theta_{kb}$ evolution of slow mode',fontsize=7)
-ax.grid(True,linestyle=':')
-plt.savefig('theta_kb.pdf')
+# plt.xlim([1,20])
+plt.legend(ncol=2)
+plt.xlabel('r [Rs]')
+plt.ylabel('Velocity [km/s]')
+plt.subplot(2,1,2)
+plt.xlim([1,20])
+plt.ylim([0.,120])
+plt.xlabel('r [Rs]')
+plt.legend(ncol=2)
+plt.ylabel('Velocity [km/s]')
+plt.title('Relative Velocity')
+plt.tight_layout()
 plt.show()
 
+sun_sphere = pv.Sphere(1.5)
+sun_sphere = sun_sphere.sample(box_grid)
+
+projpos_line = pv.lines_from_points(projPos)
+projpos_line = projpos_line.sample(box_grid)
+
+
+case_dt = datetime(2021,10,4,8)
+case_ind = np.argmin(abs((np.array(epochDt)-case_dt)/timedelta(days=1)))
+# p.camera.focal_point=casePos
+# p.camera.position = casePos*1.5+np.array([0,0,2])
+# p.camera.position = casePos*3.+np.array([0,3,7])
+# p.camera.position = casePos*3.+np.array([0,5,7])
+# p.camera.position = np.array([-20,0,20])
+
+
+# %%
+# obs_time = np.array([datetime(2021,10,1,7,12),datetime(2021,10,1,7,28),
+#                      datetime(2021,10,12,9,55),
+#                      datetime(2021,10,23,4,45),datetime(2021,10,23,6,5)])
+# obs_Vr = np.array([85.77,136.29,161.55,90.82,141.34])
+# obs_Vx = np.array([-9.366585582,-40.50130796,-127.9369512,8.775763386,10.52712678])
+# obs_Vy = np.array([0.184111948,0.901671455,-96.03392846,27.93541434,32.00513614])
+# obs_Vz = np.array([85.25700362,130.1244943,-22.52547862,85.97491334,137.2661661])
+# #vp_x	vp_y	vp_z
+# # -9.366585582	0.184111948	85.25700362
+# # -40.50130796	0.901671455	130.1244943
+# # -127.9369512	-96.03392846	-22.52547862
+# # 8.775763386	27.93541434	85.97491334
+# # 10.52712678	32.00513614	137.2661661
+# plt.figure()
+# # plt.plot(epochDt,projpos_line['Vr'].ravel(),label='simu_Vr')
+# plt.plot(epochDt,projpos_line['Vx'].ravel()/1000,label='model_Vx')
+# plt.plot(epochDt,projpos_line['Vy'].ravel()/1000,label='model_Vy')
+# plt.plot(epochDt,projpos_line['Vz'].ravel()/1000,label='model_Vz')
+# plt.xlabel('Time')
+# plt.ylabel('Solar Wind Velocity [km/s]')
+# plt.scatter(obs_time,obs_Vx,label='obs_Vx')
+# plt.scatter(obs_time,obs_Vy,label='obs_Vy')
+# plt.scatter(obs_time,obs_Vz,label='obs_Vz')
+# plt.legend()
+# plt.title('Solar Wind Velocity')
+# plt.show()
 
