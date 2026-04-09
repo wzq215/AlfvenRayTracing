@@ -56,8 +56,9 @@ obs_Vx = np.array([-9.366585582,-40.50130796,-127.9369512,8.775763386,10.5271267
 obs_Vy = np.array([0.184111948,0.901671455,-96.03392846,27.93541434,32.00513614])
 obs_Vz = np.array([85.25700362,130.1244943,-22.52547862,85.97491334,137.2661661])
 
-
-plt.figure()
+# %%
+plt.figure(dpi=300,figsize=(8,4),)
+plt.subplots_adjust(bottom=0.3)
 for data_i in range(3):
     if data_i == 0:
         data_path = '/Users/ephe/THL8/RayTracing/run_1001/SC/'
@@ -65,7 +66,7 @@ for data_i in range(3):
         data_path = '/Users/ephe/THL8/RayTracing/run_1012/'
     elif data_i == 2:
         data_path = '/Users/ephe/THL8/RayTracing/run_1023/'
-    # %%
+
 
     file_type = 'box_mhd_4_'
     n_iter = 10000
@@ -142,13 +143,10 @@ for data_i in range(3):
     projpos_line = pv.lines_from_points(projPos)
     projpos_line = projpos_line.sample(box_grid)
 
-
-
-
     plt.plot(epochDt,projpos_line['Vx'].ravel()/1000,label='model_Vx',color='red')
     plt.plot(epochDt,projpos_line['Vy'].ravel()/1000,label='model_Vy',color='green')
     plt.plot(epochDt,projpos_line['Vz'].ravel()/1000,label='model_Vz',color='blue')
-    plt.xlabel('Time')
+    plt.xlabel('Date')
     plt.ylabel('Solar Wind Velocity [km/s]')
     plt.scatter(obs_time,obs_Vx,label='obs_Vx',color='red')
     plt.scatter(obs_time,obs_Vy,label='obs_Vy',color='green')
@@ -161,5 +159,7 @@ locator = mdates.DayLocator(interval=2)
 formatter = mdates.DateFormatter('%m-%d')
 plt.gca().xaxis.set_major_locator(locator)
 plt.gca().xaxis.set_major_formatter(formatter)
-plt.show()
+plt.xticks(rotation=45)
+# plt.show()
+plt.savefig('TW_compare_simu.png')
 

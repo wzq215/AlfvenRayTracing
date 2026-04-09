@@ -31,7 +31,7 @@ for i in range(len(df)):
     # for theta in np.linspace(0, np.pi * 2, 5):
     #     pos_ini = np.array([15. * np.cos(theta), 15. * np.sin(theta), 0.])
     #     k_ini = np.array([5. * np.cos(theta+np.pi/2), 5. * np.sin(theta+np.pi/2), 0.]) * 1.e-5
-    for mode in ['Alfven']:
+    for mode in ['Alfven','Slow','Fast']:
         for direction in ['Forward', 'Backward']:
             if direction == 'Forward':
                 reverse = 'Backward'
